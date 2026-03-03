@@ -1,0 +1,19 @@
+# Nokia N1 TWRP fstab
+# mount_point  fstype  block_device  [flags]
+#
+# Block devices use PCI path (Intel Moorefield eMMC controller)
+# Symlinked to /dev/block/by-name/ in init.recovery.mofd_v1.rc
+
+/boot          emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/boot
+/recovery      emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/recovery
+/fastboot      emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/fastboot
+/splashscreen  emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/splashscreen
+
+/system        ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/system
+/cache         ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/cache
+/misc          emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/misc
+/persistent    emmc    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/persistent
+/config        ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/config
+/data          ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/data
+/logs          ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/logs
+/factory       ext4    /dev/block/pci/pci0000:00/0000:00:01.0/by-name/factory

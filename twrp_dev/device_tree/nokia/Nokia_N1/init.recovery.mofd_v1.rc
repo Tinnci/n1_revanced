@@ -1,0 +1,53 @@
+# Nokia N1 (mofd_v1) recovery init script
+# Hardware: Intel Moorefield Z3580, JDI 2048x1536 display, PowerVR GPU
+
+on early-init
+    # Load Tangier display driver (64-bit module for 64-bit kernel)
+    # This MUST happen before recovery starts to initialize the framebuffer
+    insmod /lib/modules/tngdisp.ko
+    chmod 0600 /dev/dri/controlD64
+    start thermald
+
+on init
+    # Create /dev/block/by-name symlink for Intel PCI-based eMMC
+    # Android uses disk controller in path; we need a shortcut for fstab compat
+    symlink /dev/block/pci/pci0000:00/0000:00:01.0/by-name /dev/block/by-name
+
+    write /proc/sys/kernel/panic_on_oops 1
+
+    # Mount factory partition (contains encryption footer)
+    mkdir /factory 0775 system system
+    mount ext4 /dev/block/by-name/factory /factory nosuid nodev noatime barrier=1,data=ordered
+
+on boot
+    setprop sys.usb.config adb
+    trigger firmware_mounts_complete
+
+on firmware_mounts_complete
+    rm /dev/.booting
+
+# USB ADB configuration (Intel VID/PID for recovery mode)
+on property:sys.usb.config=adb
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 8087
+    write /sys/class/android_usb/android0/idProduct 0a5d
+    write /sys/class/android_usb/android0/iProduct "Android-Phone"
+    write /sys/class/android_usb/android0/functions $sys.usb.config
+    write /sys/class/android_usb/android0/enable 1
+
+# Intel property loader (reads firmware version info from sysfs)
+service intel_prop /sbin/intel_prop
+    oneshot
+
+# Watchdog daemon (60s timeout, 20s margin)
+service watchdogd /sbin/watchdogd 60 20
+    oneshot
+
+# Thermal management daemon
+service thermald /sbin/thermald ROS
+    class core
+    user root
+
+# Reset watchdog counter once recovery is running
+on property:init.svc.recovery=running
+    write /sys/devices/virtual/misc/watchdog/counter "0"

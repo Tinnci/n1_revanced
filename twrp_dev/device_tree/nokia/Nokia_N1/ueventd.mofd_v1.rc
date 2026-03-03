@@ -1,0 +1,24 @@
+# Nokia N1 ueventd rules for recovery
+# Display / GPU
+/dev/card0                              0666   system     system
+/dev/pvr_sync                           0666   system     system
+/dev/sw_sync                            0660   system     system
+
+# Watchdog
+/dev/watchdog                           0600   system     system
+
+# Bluetooth/FM (may be needed for OTG peripherals)
+/dev/rfkill                             0660   bluetooth  bluetooth
+
+# Security
+/dev/sep_sec_driver                     0660   system     system
+/dev/mei                                0660   system     system
+
+# Persistent partition
+/dev/block/pci/pci0000:00/0000:00:01.0/by-name/persistent     0660  system  system
+
+# Thermal
+/sys/devices/virtual/thermal/cooling_device*    cur_state            0644 system system
+/sys/devices/virtual/thermal/thermal_zone*      trip_point_1_temp    0644 system system
+/sys/devices/virtual/thermal/thermal_zone*      trip_point_0_temp    0644 system system
+/sys/devices/virtual/thermal/thermal_zone*      emul_temp            0644 system system
