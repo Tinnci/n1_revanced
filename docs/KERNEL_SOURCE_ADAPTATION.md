@@ -64,13 +64,13 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 | **后摄** | OV8858 | I2C bus 4 @ 0x10, 8MP |
 | **前摄** | OV5693 | I2C bus 4 @ 0x36, 5MP |
 | **闪光灯** | LM3559 | I2C bus 4 @ 0x53 |
-| **WiFi** | BCM43xx (SDIO) | 26MHz 参考时钟, GPIO 64/96 |
-| **GPS** | BCM47521 | HSU port 0 |
-| **蓝牙** | BCM (via HSU) | ttyMFD0 |
+| **WiFi** | **BCM43241 B4** (SDIO) | 26MHz 参考时钟, GPIO 64(中断)/96(使能) |
+| **GPS** | BCM47521 | HSU port 0, UART 1 |
+| **蓝牙** | BCM (via HSU) | GPIO 71(复位)/184(唤醒)/185(UART使能) |
 | **eMMC** | 032GE4 29.1 GiB | HS200, SDHCI PCI 8086:1490 |
-| **USB** | DWC3 OTG | PCI 0000:00:11.0 |
-| **传感器** | 通过 PSH (Platform Sensor Hub) | 无独立 I2C 设备 |
-| **NFC** | ❌ 无 | |
+| **USB** | DWC3 OTG | PCI 0000:00:11.0, VID=8087 PID=0a5d |
+| **传感器** | 通过 PSH (I2C bus 8) | LSM303DLHC(加速度/磁力), L3GD20H(陀螺), APDS-9900(光), LPS331AP(气压) |
+| **NFC** | **PN544** (NXP) | I2C bus 5 @ 0x28, GPIO 174(中断)/175(使能)/176(复位) |
 
 ---
 
@@ -88,15 +88,15 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 | **闪光灯** | LM3559 `=m` ✅ | LM3559 | ✅ 匹配 | 无需修改 |
 | **音频编解码器** | WM8958/WM8994 `=y` ✅ | WM8958 | ✅ 匹配 | 无需修改 |
 | **PMIC** | ShadyCove `=y` ✅ | ShadyCove | ✅ 匹配 | 无需修改 |
-| **WiFi** | BCMDHD (SDIO) `=m` ✅ | BCM43xx (SDIO) | ✅ 匹配 | 无需修改 |
+| **WiFi** | BCMDHD (SDIO) `=m` ✅ | BCM43241 B4 (SDIO) | ✅ 匹配 | 固件路径需调整 |
 | **GPS** | BCM47521 ✅ | BCM47521 | ✅ 匹配 | 无需修改 |
 | **蓝牙** | BCM_BT_LPM `=m` ✅ | BCM BT | ✅ 匹配 | 无需修改 |
 | **显示面板** | JDI_7x12_VID ✅ | JDI_7x12_VID | ✅ 匹配 | 无需修改 |
 | **GPU/DRM** | tngdisp.ko ✅ | tngdisp.ko | ✅ 匹配 | 无需修改 |
 | **IMX 摄像头** | IMX `=m` | ❌ 无此硬件 | N/A | 可禁用 |
-| **NFC** | BCM20795 (SFI 表中) | ❌ 无此硬件 | N/A | 无影响 |
+| **NFC** | BCM20795 (SFI 表中) | **PN544** (I2C bus 5) | ⚠️ 不同芯片 | 需要不同驱动 (CONFIG_PN544_NFC) |
 
-**结论**: 核心 SoC、PMIC、显示、音频、WiFi/BT/GPS 完全兼容。差异集中在 **触摸控制器** 和部分 **电源管理/摄像头** 驱动的 defconfig 开关。
+**结论**: 核心 SoC、PMIC、显示、音频、GPS 完全兼容。差异集中在 **触摸控制器**、**NFC 芯片型号**、部分 **电源管理/摄像头** 驱动的 defconfig 开关，以及 **WiFi 固件路径**。
 
 ---
 
@@ -134,8 +134,21 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 - CONFIG_MODULE_SIG_FORCE=y
 + # CONFIG_MODULE_SIG_FORCE is not set
 
-# === 可选：版本调整（如需兼容原始 tngdisp.ko） ===
+# === WiFi 固件路径：匹配 Nokia N1 的 BCM43241 B4 ===
+- CONFIG_BCMDHD_FW_PATH="/system/etc/firmware/fw_bcmdhd.bin"
++ CONFIG_BCMDHD_FW_PATH="/system/etc/firmware/fw_bcmdhd.bin_43241_b4"
+- CONFIG_BCMDHD_NVRAM_PATH="/system/etc/firmware/bcmdhd_aob.cal"
++ CONFIG_BCMDHD_NVRAM_PATH="/system/etc/firmware/bcmdhd_aob.cal_43241_b4"
+
+# === NFC：启用 PN544 驱动 ===
++ CONFIG_PN544_NFC=m
++ CONFIG_NFC_PN544=m
++ CONFIG_NFC_PN544_I2C=m
+
+# === 可选：版本调整（如需兼容原始 tngdisp.ko / 其他原始模块） ===
 # 需修改 Makefile: SUBLEVEL = 72 → 62
+# vermagic 将变为: 3.10.62-x86_64_moor SMP preempt mod_unload
+# 这样可以加载设备上全部 36 个原始 .ko 模块
 ```
 
 ### 3.2 board.c 修改 (`arch/x86/platform/intel-mid/board.c`)
@@ -149,7 +162,20 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 #endif
 ```
 
-**说明**: Nokia N1 的 IAFW 固件 SFI DEVS 表中包含 "Goodix-TS" 设备条目。CyanogenMod 源码中默认没有此条目，因此 SFI 解析时会跳过它。添加此行后，内核会在 I2C bus 6 创建对应的 I2C client 设备，Goodix 驱动即可探测。
+**说明**: Nokia N1 的 IAFW 固件 SFI DEVS 表中 **不包含** "Goodix-TS" 条目（详见 HARDWARE_PARAMETERS.md §2.2 和 §12.2）。
+原始 Nokia N1 内核通过驱动代码自行注册 I2C 设备，绕过了 SFI 设备匹配机制。
+
+CyanogenMod 源码同样没有此条目。添加此行后，内核会在 SFI 解析阶段在 I2C bus 6 创建对应的 I2C client 设备 (地址 0x5D 由 IAFW 运行时分配)，Goodix 驱动即可通过标准 I2C 匹配探测。
+
+**替代方案**: 如果不修改 board.c，可在 GT9xx 驱动的 probe 函数中硬编码 `i2c_new_device()` 调用：
+```c
+// 在 gt9xx.c 中添加平台初始化函数
+static struct i2c_board_info goodix_board_info = {
+    I2C_BOARD_INFO("Goodix-TS", 0x5d),
+    .irq = 183 + 256,  // GPIO 183 + INTEL_MID_IRQ_OFFSET
+};
+// 在 module_init 中: i2c_new_device(i2c_get_adapter(6), &goodix_board_info);
+```
 
 ### 3.3 GT9xx 驱动修改 (`drivers/external_drivers/drivers/input/touchscreen/gt9xx/`)
 
@@ -220,7 +246,7 @@ gpio-191 (GTP_RST_PORT        ) in  hi    ← 重置引脚 (GPIO 191)
 | tngdisp GPU/DRM | `drivers/external_drivers/intel_media/` | 218+ .c 文件, 完整 PVR RGX 源码 |
 | ShadyCove PMIC | `CONFIG_REGULATOR_PMIC_SHADY_COVE=y` | 已默认启用 |
 | WM8958 音频 | `CONFIG_SND_MOOR_MACHINE=m`, `CONFIG_MFD_WM8994=y` | 已默认启用 |
-| BCMDHD WiFi | `CONFIG_BCMDHD=m`, `CONFIG_BCMDHD_SDIO=y` | 通用 SDIO 驱动 |
+| BCMDHD WiFi | `CONFIG_BCMDHD=m`, `CONFIG_BCMDHD_SDIO=y` | 通用 SDIO 驱动 (需调整固件路径至 BCM43241 B4) |
 | BCM BT | `CONFIG_BCM_BT_LPM=m` | 已默认启用 |
 | DWC3 USB | 内置 | Z3580 通用 |
 | PSH 传感器 | 内置 | 通过 IPC 通信，无需单独 I2C 设备 |
@@ -253,12 +279,13 @@ gpio-191 (GTP_RST_PORT        ) in  hi    ← 重置引脚 (GPIO 191)
 
 ### 后续验证
 
-- [ ] WiFi 可连接 (bcmdhd 模块 + 固件)
+- [ ] WiFi 可连接 (bcmdhd 模块 + BCM43241 B4 固件)
 - [ ] 音频播放/录音正常 (WM8958)
 - [ ] 摄像头预览 (OV8858 + OV5693)
 - [ ] USB OTG 功能
 - [ ] 充电功能正常
-- [ ] 传感器数据 (PSH)
+- [ ] 传感器数据 (PSH → LSM303DLHC, L3GD20H, APDS-9900, LPS331AP)
+- [ ] NFC 通信 (PN544, I2C bus 5 @ 0x28)
 
 ---
 
@@ -277,32 +304,139 @@ gpio-191 (GTP_RST_PORT        ) in  hi    ← 重置引脚 (GPIO 191)
 |------|------|---------|
 | 电池温度读取失败 | dmesg 已显示 `BP Temp read error:-34` | 检查 MAX17050 NTC 热敏电阻配置 |
 | Intel regulator 探测失败 | 8 个 intel_regulator 探测失败 (error -22) | 不影响基本功能，稍后调查 |
-| WiFi 固件路径 | defconfig 中路径 `/system/etc/firmware/fw_bcmdhd.bin` 需匹配设备实际路径 | 确认 /system 分区存在对应固件 |
+| WiFi 固件路径 | defconfig 需指定 BCM43241 B4 固件路径 `/system/etc/firmware/fw_bcmdhd.bin_43241_b4` | 已添加到 defconfig 修改 |
 
 ### 低风险
 
 | 风险 | 描述 | 缓解措施 |
 |------|------|---------|
-| NFC 缺位 | SFI 表中无 NFC 设备，源码中 NFC 驱动不会加载 | 无影响 |
+| NFC 芯片不同 | ZenFone 2 用 BCM20795，Nokia N1 用 PN544，需要不同驱动 | 启用 CONFIG_PN544_NFC，需验证 I2C 通信 |
 | IMX 摄像头 | ZenFone 2 的 IMX 驱动不会影响 Nokia N1 | 可安全禁用 |
 | eMMC 型号差异 | Nokia N1 使用 032GE4，无特殊要求 | 通用 SDHCI 驱动兼容 |
 
 ---
 
-## 7. 修改总结
+## 7. SFI 设备表遗留分析
+
+> 详细数据参见 [HARDWARE_PARAMETERS.md](HARDWARE_PARAMETERS.md) §2 和 §12
+
+### 7.1 SFI DEVS 表结构
+
+Nokia N1 的 IAFW 固件 SFI DEVS 表包含 **46 个条目**（1174 字节），每条目 25 字节：
+
+```c
+struct sfi_device_table_entry {  // include/linux/sfi.h:154
+    u8  type;         // SFI_DEV_TYPE_IPC=2, I2C=1, SPI=0, etc.
+    u8  host_num;     // 总线编号
+    u16 addr;         // I2C 地址或 IPC 设备编号
+    u8  irq;          // 中断号
+    u32 max_freq;     // 最大频率 (Hz)
+    char name[16];    // 设备名称 (ASCII)
+};
+```
+
+### 7.2 ZenFone 2 遗留条目识别
+
+SFI 表中包含 3 个 ZenFone 2 遗留设备，被 Nokia N1 实际设备覆盖：
+
+| 条目# | 遗留设备 | 总线/地址 | Nokia N1 实际 | 处理方式 |
+|--------|---------|-----------|-------------|---------|
+| #3 | imx135 | I2C 4 @ 0x10 | **ov8858** (条目#44) | 同地址覆盖，IMX 驱动探测失败 |
+| #13 | imx132 | I2C 4 @ 0x36 | **ov5693** (条目#45) | 同地址覆盖，IMX 驱动探测失败 |
+| #8 | r69001-ts-i2c | I2C 7 @ 0x55 | **Goodix-TS** (不在表中) | 不同总线/地址，r69001 探测失败 |
+
+OV8858/OV5693 条目在表尾（#44-45），为 Nokia N1 适配时追加。
+
+### 7.3 Goodix-TS 不在 SFI 表中
+
+这是最重要的发现：Goodix GT928 触摸控制器（I2C bus 6 @ 0x5D）**完全不在 SFI DEVS 表中**。
+
+原始 Nokia N1 内核通过以下机制之一注册设备：
+1. 内核驱动在 `module_init()` 中直接调用 `i2c_new_device()`
+2. 自定义 board 文件中的平台初始化代码
+3. GT9xx 驱动内部的设备发现机制
+
+**编译新内核时**必须解决此问题，方案见 §3.2 (board.c 修改) 或 §3.3 (驱动内硬编码)。
+
+---
+
+## 8. 原始模块兼容性
+
+> 详细清单参见 [STOCK_BOOT_ANALYSIS.md](STOCK_BOOT_ANALYSIS.md) §3.3
+
+### 8.1 原始 .ko 模块概览
+
+设备出厂 ramdisk 包含 36 个 signed 内核模块 (vermagic: `3.10.62-x86_64_moor SMP preempt mod_unload`)：
+
+| 类别 | 数量 | 关键模块 | 编译策略 |
+|------|------|---------|---------|
+| 显示/GPU | 4 | tngdisp.ko (2.4MB) | ⚠️ 尽量复用原始模块 (闭源 PowerVR) |
+| 音频 | 11 | snd-soc-florida.ko (3.6MB) | 可重新编译 (有完整源码) |
+| 摄像头 | 9 | atomisp-css*.ko, ov8858, ov5693 | 可重新编译 |
+| WiFi/BT | 3 | bcmdhd.ko (1.1MB) | 可重新编译 |
+| 其他 | 9 | sep3_15.ko, mac80211.ko | 按需编译 |
+
+### 8.2 关键模块加载顺序
+
+来自 stock `init.mofd_v1.rc` 的模块加载序列：
+
+```bash
+# Phase 1: on init (最早加载)
+insmod /lib/modules/tngdisp.ko          # 显示 (必须最先)
+
+# Phase 2: on boot
+insmod /lib/modules/arizona-i2c.ko      # 音频 I2C 接口
+insmod /lib/modules/snd-soc-arizona.ko  # 音频 ASoC
+insmod /lib/modules/snd-soc-wm-adsp.ko # WM DSP
+insmod /lib/modules/snd-soc-wm-hubs.ko # WM 集线器
+insmod /lib/modules/snd-soc-florida.ko  # Florida/WM8958 编解码器
+insmod /lib/modules/snd-soc-wm8994.ko  # WM8994 ASoC
+insmod /lib/modules/snd-soc-sst-platform.ko dpcm_enable=1 dfw_enable=1
+insmod /lib/modules/snd-intel-sst.ko    # Intel SST 核心
+insmod /lib/modules/snd-moor-dpcm-florida.ko
+insmod /lib/modules/snd-merr-dpcm-wm8958.ko
+insmod /lib/modules/cfg80211.ko         # WiFi 框架
+insmod /lib/modules/bcmdhd.ko           # BCM43241 驱动
+
+# Phase 3: on post-fs
+insmod /lib/modules/rmi4.ko             # ← 不存在! 静默失败
+```
+
+### 8.3 vermagic 兼容策略
+
+要复用原始 36 个 .ko 模块（特别是闭源的 tngdisp.ko），需要：
+
+1. Makefile `SUBLEVEL = 62`（不是源码默认的 72）
+2. `CONFIG_MODULE_SIG_FORCE` 禁用（原始模块用不同密钥签名）
+3. 编译选项一致：`SMP preempt mod_unload`
+
+原始模块已备份到仓库 `firmware/stock_modules/` 目录。
+
+---
+
+## 9. 修改总结
 
 ```
 需要修改的文件     : 4 个
-  arch/x86/configs/x86_64_moor_defconfig  — 8 项 CONFIG 修改
-  arch/x86/platform/intel-mid/board.c     — 添加 1 个 SFI 条目
+  arch/x86/configs/x86_64_moor_defconfig  — 12 项 CONFIG 修改
+    (触摸, 电池, 充电, 前摄, IKCONFIG, MODULE_SIG, WiFi固件路径, NFC)
+  arch/x86/platform/intel-mid/board.c     — 添加 1 个 SFI 条目 (Goodix-TS)
   drivers/.../gt9xx/gt9xx.h               — 修改驱动名称 + GPIO 引脚
   drivers/.../gt9xx/gt9xx.c               — 移除 I2C 地址覆盖
 
-可选修改           : 2 个
-  Makefile                                — SUBLEVEL 72→62 (兼容原始模块)
-  scripts/config                          — 启用 IKCONFIG, 禁用 MODULE_SIG_FORCE
+可选修改           : 1 个
+  Makefile                                — SUBLEVEL 72→62 (兼容全部 36 个原始模块)
 
 完全不需要修改     : SoC 平台代码、显示驱动、音频、WiFi/BT/GPS、PMIC、USB、安全引擎
 ```
 
 **适配难度**: 🟢 低 — 所有硬件驱动源码完整可用，差异仅限于外围设备配置开关和触摸控制器参数。
+
+### 交叉引用文档
+
+| 文档 | 内容 |
+|------|------|
+| [HARDWARE_PARAMETERS.md](HARDWARE_PARAMETERS.md) | 完整 SFI 表 (46 DEVS + 70 GPIO)、PCI 设备、调压器、热传感器 |
+| [STOCK_BOOT_ANALYSIS.md](STOCK_BOOT_ANALYSIS.md) | Stock ramdisk 分析、36 模块清单、init 脚本、ZenFone 2 遗留 |
+| [KERNEL_ANALYSIS.md](KERNEL_ANALYSIS.md) | 内核 ELF 分析、kallsyms、闭源驱动提取 |
+| [FIRMWARE_INVENTORY.md](FIRMWARE_INVENTORY.md) | /system 分区固件文件清单 (36 文件, ~33MB) |
