@@ -176,15 +176,25 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 
 #### 3.3.3 GPIO 引脚配置 (`gt9xx.h`)
 
-```c
-// 验证以下定义是否匹配 Nokia N1:
-#define GTP_RST_PORT    128    // 触摸重置 GPIO — 需要验证
-#define GTP_INT_PORT    133    // 触摸中断 GPIO — Nokia N1 IRQ=439, 对应 LNW-GPIO 183
+```diff
+- #define GTP_RST_PORT    128    // ZenFone 2 触摸重置 GPIO
++ #define GTP_RST_PORT    191    // Nokia N1 触摸重置 GPIO (已通过 debugfs 确认)
+
+- #define GTP_INT_PORT    133    // ZenFone 2 触摸中断 GPIO
++ #define GTP_INT_PORT    183    // Nokia N1 触摸中断 GPIO (IRQ 439 = GPIO 183 + INTEL_MID_IRQ_OFFSET 256)
 ```
 
-**⚠️ 关键**: Nokia N1 的 Goodix 中断映射到 LNW-GPIO-demux IRQ 439，对应 GPIO 183（= 439 - 256 GPIO base）。源码默认 GTP_INT_PORT=133 可能需要改为 183。RST_PORT=128 也需要通过更多测试确认。
+**验证方法**: 通过 `mount -t debugfs debugfs /sys/kernel/debug && cat /sys/kernel/debug/gpio` 获取实际 GPIO 分配:
+```
+gpio-183 (GTP_INT_IRQ         ) in  hi    ← 中断引脚 (GPIO 183, IRQ = 183 + 256 = 439)
+gpio-191 (GTP_RST_PORT        ) in  hi    ← 重置引脚 (GPIO 191)
+```
 
-> **注意**: GPIO 编号取决于 pinctrl 驱动的 base 偏移。如果 LNW GPIO base 不是 256，则计算结果不同。建议在 dmesg 中搜索 `gpiochip_add` 或 `gpio_base` 确认。
+**GPIO 编号系统**:
+- LNW GPIO chip: base=0, count=192 (PCI 0000:00:0c.0)
+- MSIC GPIO chip: base=192, count=8 (PMIC)
+- IRQ = GPIO + `INTEL_MID_IRQ_OFFSET` (0x100 = 256)
+- `/proc/interrupts` 中 `Goodix-TS` 的 IRQ=439 对应 GPIO=183
 
 ### 3.4 Makefile 版本修改 (可选)
 
@@ -258,7 +268,6 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 
 | 风险 | 描述 | 缓解措施 |
 |------|------|---------|
-| GPIO 编号不匹配 | Goodix GPIO_INT/RST 引脚编号可能与 ZenFone 2 不同 | 从 dmesg/SFI GPIO 表反推 |
 | vermagic 不匹配 | 编译出的内核无法加载原始 tngdisp.ko → 无屏幕 | 修改 SUBLEVEL=62 或重编译 tngdisp |
 | Camera 子系统差异 | OV5693 平台数据 (GPIO, 时钟) 可能不同 | 从 dmesg 观测 GPIO 分配 |
 
