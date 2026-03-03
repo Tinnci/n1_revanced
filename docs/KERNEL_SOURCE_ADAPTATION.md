@@ -145,10 +145,13 @@ Nokia N1 与 ASUS ZenFone 2 共享 Intel Atom Z3580 (Moorefield) SoC，但外围
 + CONFIG_NFC_PN544=m
 + CONFIG_NFC_PN544_I2C=m
 
-# === 可选：版本调整（如需兼容原始 tngdisp.ko / 其他原始模块） ===
+# === 版本匹配（必须，兼容原始 tngdisp.ko） ===
 # 需修改 Makefile: SUBLEVEL = 72 → 62
+# 需添加以下到 defconfig:
++ CONFIG_LOCALVERSION="-x86_64_moor"
+# CONFIG_LOCALVERSION_AUTO is not set
+# 需创建空文件 .scmversion
 # vermagic 将变为: 3.10.62-x86_64_moor SMP preempt mod_unload
-# 这样可以加载设备上全部 36 个原始 .ko 模块
 ```
 
 ### 3.2 board.c 修改 (`arch/x86/platform/intel-mid/board.c`)
@@ -222,17 +225,34 @@ gpio-191 (GTP_RST_PORT        ) in  hi    ← 重置引脚 (GPIO 191)
 - IRQ = GPIO + `INTEL_MID_IRQ_OFFSET` (0x100 = 256)
 - `/proc/interrupts` 中 `Goodix-TS` 的 IRQ=439 对应 GPIO=183
 
-### 3.4 Makefile 版本修改 (可选)
+### 3.4 vermagic 版本修改 (必要)
 
-如果需要加载设备上现有的 tngdisp.ko（而非重新编译），需要匹配 vermagic：
+要加载设备上现有的 tngdisp.ko（闭源 GPU 驱动，无法重新编译），必须精确匹配 vermagic `3.10.62-x86_64_moor SMP preempt mod_unload`。需要三步修改：
 
+**步骤 1：修改 SUBLEVEL**
 ```diff
 # 根目录 Makefile
 - SUBLEVEL = 72
 + SUBLEVEL = 62
 ```
 
-这样编译出的内核 vermagic 将为 `3.10.62-x86_64_moor SMP preempt mod_unload`，与原始 tngdisp.ko 完全匹配。
+**步骤 2：设置 CONFIG_LOCALVERSION**（defconfig 和 .config）
+```diff
+- CONFIG_LOCALVERSION=""
+- CONFIG_LOCALVERSION_AUTO=y
++ CONFIG_LOCALVERSION="-x86_64_moor"
++ # CONFIG_LOCALVERSION_AUTO is not set
+```
+
+**步骤 3：创建 .scmversion 文件**
+```bash
+touch .scmversion   # 阻止 scripts/setlocalversion 追加 git hash 或 "+" 后缀
+```
+
+三步缺一不可：
+- SUBLEVEL=62 确保主版本号正确
+- LOCALVERSION="-x86_64_moor" 提供正确的后缀字符串
+- LOCALVERSION_AUTO=n + .scmversion 防止 git 自动追加 hash (`-gXXXXXXX-dirty`) 或脏标记 (`+`)
 
 ---
 
@@ -407,8 +427,13 @@ insmod /lib/modules/rmi4.ko             # ← 不存在! 静默失败
 要复用原始 36 个 .ko 模块（特别是闭源的 tngdisp.ko），需要：
 
 1. Makefile `SUBLEVEL = 62`（不是源码默认的 72）
-2. `CONFIG_MODULE_SIG_FORCE` 禁用（原始模块用不同密钥签名）
-3. 编译选项一致：`SMP preempt mod_unload`
+2. `CONFIG_LOCALVERSION="-x86_64_moor"`（提供正确后缀）
+3. `CONFIG_LOCALVERSION_AUTO` 禁用（防止 git hash 后缀）
+4. 创建 `.scmversion` 空文件（防止 `+` 脏标记后缀）
+5. `CONFIG_MODULE_SIG_FORCE` 禁用（原始模块用不同密钥签名）
+6. 编译选项一致：`SMP preempt mod_unload`
+
+最终 vermagic: `3.10.62-x86_64_moor SMP preempt mod_unload` ✅
 
 原始模块已备份到仓库 `firmware/stock_modules/` 目录。
 
@@ -417,20 +442,111 @@ insmod /lib/modules/rmi4.ko             # ← 不存在! 静默失败
 ## 9. 修改总结
 
 ```
-需要修改的文件     : 4 个
-  arch/x86/configs/x86_64_moor_defconfig  — 12 项 CONFIG 修改
-    (触摸, 电池, 充电, 前摄, IKCONFIG, MODULE_SIG, WiFi固件路径, NFC)
+需要修改的文件     : 5 个
+  arch/x86/configs/x86_64_moor_defconfig  — 14 项 CONFIG 修改
+    (触摸, 电池, 充电, 前摄, IKCONFIG, MODULE_SIG, WiFi固件路径, NFC,
+     LOCALVERSION="-x86_64_moor", LOCALVERSION_AUTO=n)
   arch/x86/platform/intel-mid/board.c     — 添加 1 个 SFI 条目 (Goodix-TS)
   drivers/.../gt9xx/gt9xx.h               — 修改驱动名称 + GPIO 引脚
   drivers/.../gt9xx/gt9xx.c               — 移除 I2C 地址覆盖
+  Makefile                                — SUBLEVEL 72→62 (vermagic 必须匹配 tngdisp.ko)
 
-可选修改           : 1 个
-  Makefile                                — SUBLEVEL 72→62 (兼容全部 36 个原始模块)
+额外创建的文件     : 1 个
+  .scmversion                             — 空文件, 阻止 git hash / "+" 后缀
 
 完全不需要修改     : SoC 平台代码、显示驱动、音频、WiFi/BT/GPS、PMIC、USB、安全引擎
 ```
 
 **适配难度**: 🟢 低 — 所有硬件驱动源码完整可用，差异仅限于外围设备配置开关和触摸控制器参数。
+
+---
+
+## 10. GCC 15 编译兼容性修复
+
+CyanogenMod 3.10.62 内核源码原本为 GCC 4.x/5.x 编写。使用 GCC 15.2.1 (CachyOS) 原生编译需要以下修复。
+
+### 10.1 Makefile 全局编译标志
+
+在根目录 `Makefile` 的 `KBUILD_CFLAGS` 中追加：
+
+```makefile
+# C 标准和内联语义
+-std=gnu11                  # GCC 15 默认 C23，_Bool/true/false 成为关键字冲突
+-fgnu89-inline              # 恢复 GNU89 内联行为（C11 的 extern inline 语义不同）
+
+# 抑制 GCC 15 新增的错误/警告
+-Wno-error                  # 全面禁止 -Werror
+-Wno-return-mismatch        # implicit int 返回类型
+-Wno-missing-attributes     # cold 属性在 init_module 等声明中的不匹配
+-Wno-error=incompatible-pointer-types
+-Wno-error=int-conversion
+
+# 抑制 GCC 8+ 警告
+-Wno-misleading-indentation -Wno-array-bounds -Wno-stringop-truncation
+-Wno-stringop-overflow -Wno-restrict -Wno-maybe-uninitialized
+-Wno-alloc-size-larger-than -Wno-format-overflow -Wno-format-truncation
+-Wno-packed-not-aligned -Wno-address-of-packed-member
+-Wno-implicit-fallthrough -Wno-unused-but-set-variable
+-Wno-unused-const-variable -fno-strict-overflow
+```
+
+`HOSTCFLAGS` 追加 `-fcommon`（链接器多定义符号宽容模式）。
+
+### 10.2 Boot 子目录 Makefile
+
+以下三个目录的 Makefile 会覆盖主 `KBUILD_CFLAGS`，需单独添加 `-std=gnu11 -fgnu89-inline`：
+
+- `arch/x86/boot/Makefile`
+- `arch/x86/boot/compressed/Makefile`
+- `arch/x86/realmode/rm/Makefile`
+
+### 10.3 头文件修复
+
+| 文件 | 问题 | 修复 |
+|------|------|------|
+| `include/linux/compiler-gcc15.h` | 不存在 | 创建符号链接 → `compiler-gcc5.h` |
+| `include/linux/log2.h` | `const, noreturn` 属性组合被 GCC 15 拒绝 | 移除 `const` 属性 |
+| `include/linux/jbd_common.h` | BH_* 枚举位与 jbd2.h 重定义冲突 | 改为 `#define` 宏 + `_JBD2_BH_BITS_DEFINED` 守卫 |
+| `include/linux/jbd.h` | 缺失 BUFFER_FNS 和 BH_Unshadow | 添加完整的 BUFFER_FNS 宏集合 |
+| `include/linux/jbd2.h` | 与 jbd_common.h 的 BH 位定义冲突 | 添加 `_JBD2_BH_BITS_DEFINED` 标记 |
+
+### 10.4 源码 Bug 修复（非 GCC 版本相关）
+
+| 文件 | 问题 | 修复 |
+|------|------|------|
+| `ipc/sem.c` | `sem_array` 无 `use_global_lock` 成员 | 移除相关检查 |
+| `ipc/shm.c` | `shm_rcu_free()` 重复定义 | 移除重复函数 |
+| `ipc/msg.c` | `msg_unlock`/`ipc_lock_by_ptr` API 不存在 | 改为 `ipc_unlock`/`ipc_lock_object` |
+| `drivers/mmc/core/core.c` | `EXPORT_SYMBLO` 拼写错误 | 改为 `EXPORT_SYMBOL` |
+| `intel_soc_pmu.c` | `vdd1cnt_reg_automode_switch` 缺失返回类型 | 添加 `int` 返回类型 + `return ret` |
+
+### 10.5 内联/链接语义修复
+
+| 文件 | 问题 | 修复 |
+|------|------|------|
+| `lib/mpi/mpi-inline.h` | `extern inline` C11 语义导致多重定义 | 添加 `__attribute__((gnu_inline))` |
+| `drivers/.../mdm_util.c/.h` | `inline` 函数在 C11 下不导出符号 | 移除 `inline` 关键字 |
+| `drivers/.../intel_mid_vibra.c` | `extern bool is_incall` 依赖 RT5647 模块 | 改为 `bool __weak is_incall = false` |
+
+### 10.6 -Werror 批量移除
+
+CyanogenMod 源码中 ~20 个子目录的 Makefile 含有 `-Werror`，在 GCC 15 下导致大量编译失败。
+通过 `find drivers/ sound/ -name Makefile | xargs sed -i 's/-Werror//g'` 批量移除。
+
+### 10.7 ASUS ZenFone 特定代码移除
+
+| 文件 | 问题 | 修复 |
+|------|------|------|
+| `drivers/net/wireless/bcmdhd/dhd_linux.c` | 调用 `Read_PROJ_ID()` (ZenFone 专用) | 用 `#if 0 ... #endif` 注释掉 |
+
+### 10.8 编译结果
+
+```
+bzImage:  6,853,424 bytes  (3.10.62-x86_64_moor #7)
+模块:     26 个 .ko 文件 (vermagic: 3.10.62-x86_64_moor SMP preempt mod_unload)
+boot.img: 15,992,832 bytes (mkbootimg 格式)
+编译器:   GCC 15.2.1 (CachyOS), 原生 x86_64 编译
+```
 
 ### 交叉引用文档
 
