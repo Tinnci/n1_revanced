@@ -1,0 +1,50 @@
+
+# ===== Binary / Large Files =====
+# Boot images
+*.img
+*.gz
+*.tar.xz
+
+# Firmware binaries
+*.bin
+*.ko
+
+# Extracted boot components (can be re-extracted from images)
+twrp_dev/kernel
+twrp_dev/ramdisk
+twrp_dev/second
+
+# Extracted ramdisk (25MB, 174 files - rebuild from ramdisk)
+twrp_dev/ramdisk_unpacked/
+
+# kexec-tools build tree (451 files - rebuild with build_kexec_64.sh)
+twrp_dev/kexec-tools-2.0.28/
+
+# Precompiled binaries (rebuild from source)
+twrp_dev/bin/
+
+# Droidboot extracted binaries
+droidboot_analysis/extracted_files/
+
+# IFWI extracted binaries
+ifwi_analysis/*.bin
+
+# Device tree prebuilt binaries
+**/prebuilt/kernel
+**/prebuilt/second
+**/recovery/root/lib/modules/
+**/recovery/root/sbin/lauchrecovery
+
+# Compiled test/tool binaries (keep source, exclude ELF)
+twrp_dev/pmic_vprog2
+twrp_dev/test_kexec_payload
+
+# ===== Temporary / Generated =====
+tmp/
+*.log
+*.o
+*.pyc
+__pycache__/
+
+# ===== Original firmware images (large, keep local only) =====
+images/original/
