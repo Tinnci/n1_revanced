@@ -239,7 +239,7 @@ VSP:        vsp_pm, vsp_pmpolicy, vsp_force_up_freq, vsp_force_down_freq
 
 **模块参数**: `dcache_size_log2`, `icache_size_log2`, `sep_log_level`, `sep_log_mask`, `disable_linux_crypto`, `q_num`
 
-**闭源状态**: 🔴 完全闭源。代码是二进制编译到内核中，没有对应的开源实现。
+**闭源状态**: ✅ **源码已找到** — CyanogenMod 内核中 `drivers/staging/sep54/` 包含 10+ 个源文件（sep_driver.c, sep_applets.c, crypto_api.c 等）。设备上运行的是编译后的二进制，但可通过源码重新编译。
 
 ### 4.3 psh — Intel 传感器集线器
 
@@ -264,7 +264,7 @@ VSP:        vsp_pm, vsp_pmpolicy, vsp_force_up_freq, vsp_force_down_freq
 **代码大小**: ~53.5 KB（15 个导出函数）
 **描述**: Synopsys DWC3 USB3 控制器的 Intel Moorefield 定制版
 
-**闭源状态**: 🟠 基础 DWC3 驱动开源，Intel 平台特定代码部分闭源。
+**闭源状态**: ✅ **源码已找到** — CyanogenMod 内核中 `drivers/usb/dwc3/dwc3-intel-mrfl.c` 包含完整的 Intel Moorefield 平台特定代码。
 
 ### 4.5 intel_mid_remoteproc — SCU 通信固件
 
@@ -286,10 +286,29 @@ VSP:        vsp_pm, vsp_pmpolicy, vsp_force_up_freq, vsp_force_down_freq
 | 来源 | 状态 | 说明 |
 |------|------|------|
 | Nokia 官方 | ❌ 未公开 | Nokia N1 从未发布内核源码 |
-| Intel MID kernel | 🟡 部分可用 | [Intel Linux for MID](https://github.com/nicephil/xiern1) 有类似 3.10 内核 |
-| Android kernel 3.10 | ✅ 可用 | AOSP 通用 3.10 内核可用 |
-| PowerVR GPU | ❌ 闭源 | 仅 tngdisp.ko 二进制 |
-| sep54 | ❌ 闭源 | Discretix 私有代码 |
+| **CyanogenMod/android_kernel_asus_moorefield** | ✅ **最佳选择** | [GitHub](https://github.com/CyanogenMod/android_kernel_asus_moorefield) cm-14.1 分支, 内核 3.10.72 |
+| LineageOS/android_kernel_asus_moorefield | ✅ 可用 | CyanogenMod 的延续，lineage-15.0 分支 |
+| RaphielGang/kernel_asus_moorefield | ✅ 原厂dump | ASUS 原始源码转储 V4.21.40 (597MB) |
+| Android kernel 3.10 (AOSP) | 🟡 基础 | 缺少 Intel MID BSP 补丁 |
+| PowerVR GPU (tngdisp) | ✅ **有源码** | 完整 PVR RGX + DRM + MSVDX/TOPAZ 源码在 `drivers/external_drivers/intel_media/` |
+| sep54 | ✅ **有源码** | 在 `drivers/staging/sep54/` 下 |
+| psh (传感器) | ✅ **有源码** | 在 `drivers/external_drivers/drivers/hwmon/psh.c` |
+
+**已验证**: CyanogenMod 内核源码已克隆到 `/home/drie/n1_dev/kernel_source/`
+
+#### 兼容性验证结果
+
+| 检查项 | ZenFone 2 源码 | Nokia N1 设备 | 匹配度 |
+|--------|---------------|-------------|--------|
+| SoC | Intel Z3580 (Moorefield) | Intel Z3580 (Moorefield) | ✅ 完全匹配 |
+| 内核版本 | 3.10.72 | 3.10.62 | 🟡 +10 sublevel (可降级) |
+| 架构 | x86_64, Intel MID, SFI | x86_64, Intel MID, SFI | ✅ 完全匹配 |
+| defconfig | `x86_64_moor_defconfig` (4142 行) | — | ✅ 可用 |
+| 显示面板 | **JDI_7x12_VID** (PanelID=11) | **JDI_7x12_VID** (PanelID=11) | ✅ **完全匹配** |
+| tngdisp 驱动 | `jdi_vid.c` + DRM/PVR 全套源码 | tngdisp.ko | ✅ 源码可用 |
+| sep54 | `drivers/staging/sep54/` (10个源文件) | 内置 | ✅ 源码可用 |
+| DWC3 USB | `dwc3-intel-mrfl.c` | 内置 | ✅ 源码可用 |
+| 模块签名 | `CONFIG_MODULE_SIG_FORCE=y` (SHA256) | `Magrathea: Glacier signing key` | ⚠️ 需要新密钥 |
 
 ### 5.2 编译工具链
 
@@ -326,52 +345,56 @@ VSP:        vsp_pm, vsp_pmpolicy, vsp_force_up_freq, vsp_force_down_freq
 6. **调整 PREEMPT 模型** — 影响延迟/吞吐量
 7. **移除不需要的驱动** — 减小内核大小
 
-#### ❌ 不可行（闭源依赖）
+#### ❌ 不可行或有限制
 
-1. **替换 PowerVR GPU 驱动** — 没有开源替代（Mesa 的 pvr 支持是 2024+ 的新项目，不适配 3.10 内核）
-2. **替换 sep54** — 需要 Discretix 私有 SDK
-3. **替换视频编码/解码引擎** — MSVDX/TOPAZ 无开源框架
-4. **升级到高版本内核** — 所有 Intel MID BSP 都基于 3.10，无法迁移到 4.x/5.x
+1. **升级到高版本内核 (4.x/5.x)** — Intel MID BSP 全部基于 3.10，GPU/显示/安全驱动无法迁移
+2. **使用 Mesa 替代 PowerVR GPU** — Mesa 的 pvr 支持是 2024+ 的新项目，不适配 3.10 内核
+3. **完全脱离 Intel 闭源固件** — remoteproc.fw、topazhp_fw.bin、msvdx_fw.bin 仍为二进制 blob
 
-### 5.4 编译新内核的步骤（理论方案）
+> **注意**: 此前标记为"闭源"的 tngdisp、sep54、psh、dwc3 驱动的**源码**已在 CyanogenMod 内核仓库中找到，可以重新编译和修改。真正不可替代的闭源部分仅限于**固件二进制文件**。
+
+### 5.4 编译新内核的步骤
 
 ```bash
-# 1. 获取基础源码
-git clone https://android.googlesource.com/kernel/x86_64 -b android-3.10
-cd x86_64
+# 1. 源码已就绪
+cd /home/drie/n1_dev/kernel_source  # CyanogenMod cm-14.1, 3.10.72
 
-# 2. 应用 Intel MID 补丁
-# 需要找到 Nokia/Foxconn 的 BSP 补丁集（通常 2000+ 个补丁）
-# 关键补丁: arch/x86/platform/intel-mid/, drivers/external_drivers/
+# 2. 使用匹配的 defconfig
+export ARCH=x86_64
+export CROSS_COMPILE=x86_64-linux-android-
+make x86_64_moor_defconfig
 
-# 3. 使用原始 defconfig（如果能提取）
-# 由于没有 /proc/config.gz，我们需要从 kallsyms 反推关键配置:
-#   CONFIG_SMP=y
-#   CONFIG_PREEMPT=y
-#   CONFIG_X86_64=y
-#   CONFIG_X86_INTEL_MID=y
-#   CONFIG_SFI=y
-#   CONFIG_INTEL_MID_OSIP=y
-#   CONFIG_INTEL_SCU_WATCHDOG_EVO=y
-#   CONFIG_DWC3=y
-#   CONFIG_USB_G_ANDROID=y
-#   CONFIG_MMC=y
-#   CONFIG_SDHCI=y
-#   CONFIG_CRYPTO_DEV_SEP54=y    (内置)
-#   CONFIG_SENSORS_PSH=y          (内置)
-#   CONFIG_INTEL_MID_REMOTEPROC=y (内置+固件)
+# 3. 关键修改：启用 IKCONFIG, 禁用模块强制签名
+scripts/config --enable CONFIG_IKCONFIG
+scripts/config --enable CONFIG_IKCONFIG_PROC
+scripts/config --disable CONFIG_MODULE_SIG_FORCE
+# 或者生成自己的签名密钥
 
 # 4. 编译
-export CROSS_COMPILE=x86_64-linux-android-
-export ARCH=x86_64
-make mofd_v1_defconfig  # 如果有 defconfig
 make -j$(nproc) bzImage
+make -j$(nproc) modules    # 编译 tngdisp.ko
+
+# 5. 打包 boot.img
+mkbootimg --kernel arch/x86/boot/bzImage \
+  --ramdisk /tmp/clean_ramdisk.gz \
+  --second /home/drie/n1_dev/twrp_dev/second \
+  --base 0x10000000 --kernel_offset 0x00008000 \
+  --ramdisk_offset 0x01000000 --second_offset 0x00f00000 \
+  --tags_offset 0x00000100 --pagesize 2048 \
+  --cmdline "init=/init pci=noearly loglevel=0 vmalloc=256M \
+androidboot.hardware=mofd_v1 watchdog.watchdog_thresh=60 \
+androidboot.spid=xxxx:xxxx:xxxx:xxxx:xxxx:xxxx \
+androidboot.serialno=01234567890123456789 gpt bootboost=1 panic=15" \
+  --output boot_custom.img
 ```
 
-**关键难点**:
-- 没有原始 defconfig 和 BSP 补丁集
-- tngdisp.ko 必须使用**完全匹配的内核头文件**编译（vermagic 必须为 `3.10.62-x86_64_moor SMP preempt mod_unload`）
-- 如果内核版本字符串不完全匹配，tngdisp.ko 将拒绝加载 → 无显示输出
+**关键注意事项**:
+
+1. **GCC 版本**: 必须使用 GCC 4.8（原始编译器），推荐 Android NDK r10e 中的 x86_64 交叉工具链
+2. **vermagic 匹配**: 如果要加载设备上原有的 tngdisp.ko，编译出的内核 vermagic 必须为 `3.10.62-x86_64_moor SMP preempt mod_unload`——需要将 Makefile 的 SUBLEVEL 从 72 改为 62
+3. **模块签名**: 原始 tngdisp.ko 使用 `Magrathea: Glacier signing key` 签名。如需加载自编译模块，要么禁用 MODULE_SIG_FORCE，要么用自己的密钥重新签名
+4. **面板驱动**: Nokia N1 使用 JDI_7x12_VID (PanelID=11)，ZenFone 2 源码中已包含此面板的完整驱动 `jdi_vid.c`
+5. **remoteproc 固件**: intel_mid_remoteproc.fw (4.4KB) 已内嵌在内核 .builtin_fw 段中，源码编译时需要此固件文件
 
 ---
 
@@ -409,8 +432,8 @@ make -j$(nproc) bzImage
 ### 内核调整建议
 
 1. **短期（无需编译）**: 优化 cmdline 参数和 tngdisp.ko 模块参数
-2. **中期（如能获取 BSP）**: 编译自定义内核，启用 IKCONFIG、调试功能、减小内核体积
-3. **长期**: 研究 mainline kernel 对 Intel MID/Tangier 的支持情况（4.x+ 内核有部分 upstream 支持，但缺少显示/GPU）
+2. **中期（源码已就绪）**: 使用 CyanogenMod 源码编译自定义内核，启用 IKCONFIG、禁用 MODULE_SIG_FORCE、添加调试功能
+3. **长期**: 适配 Nokia N1 特定硬件差异（如电池管理、触摸屏控制器），构建完整的可量产内核
 
 ### 闭源驱动风险评估
 
